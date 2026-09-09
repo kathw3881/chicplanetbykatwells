@@ -147,6 +147,22 @@ export async function teemillPing() {
   }
 }
 
+function extractProducts(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data
+  if (!data || typeof data !== "object") return []
+
+  const obj = data as Record<string, unknown>
+  if (Array.isArray(obj.products)) return obj.products
+  if (Array.isArray(obj.data)) return obj.data
+
+  if (obj.data && typeof obj.data === "object") {
+    const nested = obj.data as Record<string, unknown>
+    if (Array.isArray(nested.products)) return nested.products
+  }
+
+  return []
+}
+
 /**
  * List products from the Teemill account. Requires the private key.
  * Read-only — does not modify anything.
@@ -182,33 +198,37 @@ export async function teemillListProducts() {
     }
   }
 
+  const rawProducts = extractProducts(res.data)
+
+  const products = rawProducts.map((item) => {
+    if (!item || typeof item !== "object") return item
+
+    const product = item as Record<string, unknown>
+    return {
+      id: product.id,
+      title: product.title ?? product.name,
+      enabled: product.enabled ?? product.active,
+      category: product.category ?? product.type,
+    }
+  })
+
   const data = res.data as
-    | {
-        products?: unknown[]
-        nextPageToken?: string | null
-        data?: { products?: unknown[] } | unknown[]
-      }
+    | { nextPageToken?: unknown }
     | unknown[]
     | null
 
-  const productList = Array.isArray(data)
-    ? data
-    : Array.isArray(data?.products)
-      ? data.products
-      : Array.isArray(data?.data)
-        ? data.data
-        : Array.isArray(data?.data?.products)
-          ? data.data.products
-          : []
-
   const nextPageToken =
-    !Array.isArray(data) && typeof data?.nextPageToken === "string"
+    !Array.isArray(data) &&
+    data &&
+    typeof data === "object" &&
+    typeof data.nextPageToken === "string"
       ? data.nextPageToken
       : null
 
   return {
     ok: true,
-    products: productList,
+    count: products.length,
+    products,
     nextPageToken,
   }
 }
