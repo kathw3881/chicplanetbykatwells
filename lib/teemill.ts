@@ -168,13 +168,37 @@ export async function teemillListProducts() {
       products: [],
     }
   }
+
   const res = await teemillFetch(
     `/catalog/products?project=${encodeURIComponent(status.accountId)}`,
     "private",
   )
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: res.error,
+      products: [],
+    }
+  }
+
+  const data = res.data as
+    | { products?: unknown[]; data?: { products?: unknown[] } | unknown[] }
+    | unknown[]
+    | null
+
+  const productList = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.products)
+      ? data.products
+      : Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data?.data?.products)
+          ? data.data.products
+          : []
+
   return {
-    ok: res.ok,
-    error: res.ok ? undefined : res.error,
-    products: res.ok ? res.data : [],
+    ok: true,
+    products: productList,
   }
 }
