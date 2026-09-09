@@ -148,6 +148,61 @@ export async function teemillPing() {
 }
 
 /**
+ * TEMPORARY read-only diagnostic. Describes only the SHAPE of a response —
+ * never any values, headers, credentials, tokens, or payload contents.
+ */
+type TeemillShapeDiagnostic = {
+  httpStatus: number
+  topLevelType: "array" | "object" | "null" | "string" | "number" | "boolean" | "undefined"
+  topLevelKeys?: string[]
+  topLevelArrayLength?: number
+  productsProperty?: { exists: boolean; isArray: boolean; length?: number }
+  firstItemKeys?: string[]
+}
+
+function describeShape(status: number, data: unknown): TeemillShapeDiagnostic {
+  let topLevelType: TeemillShapeDiagnostic["topLevelType"]
+  if (data === null) topLevelType = "null"
+  else if (Array.isArray(data)) topLevelType = "array"
+  else topLevelType = typeof data as TeemillShapeDiagnostic["topLevelType"]
+
+  const diagnostic: TeemillShapeDiagnostic = { httpStatus: status, topLevelType }
+
+  if (topLevelType === "array") {
+    const arr = data as unknown[]
+    diagnostic.topLevelArrayLength = arr.length
+    const first = arr[0]
+    if (first && typeof first === "object" && !Array.isArray(first)) {
+      diagnostic.firstItemKeys = Object.keys(first as Record<string, unknown>)
+    }
+  } else if (topLevelType === "object") {
+    const obj = data as Record<string, unknown>
+    diagnostic.topLevelKeys = Object.keys(obj)
+    if ("products" in obj) {
+      const products = obj.products
+      const isArray = Array.isArray(products)
+      diagnostic.productsProperty = {
+        exists: true,
+        isArray,
+        length: isArray ? (products as unknown[]).length : undefined,
+      }
+      const firstFromProducts = isArray ? (products as unknown[])[0] : undefined
+      if (
+        firstFromProducts &&
+        typeof firstFromProducts === "object" &&
+        !Array.isArray(firstFromProducts)
+      ) {
+        diagnostic.firstItemKeys = Object.keys(
+          firstFromProducts as Record<string, unknown>,
+        )
+      }
+    }
+  }
+
+  return diagnostic
+}
+
+/**
  * List products from the Teemill account. Requires the private key.
  * Read-only — does not modify anything.
  */
@@ -179,6 +234,7 @@ export async function teemillListProducts() {
       ok: false,
       error: res.error,
       products: [],
+      diagnostic: describeShape(res.status, res.data),
     }
   }
 
@@ -200,5 +256,6 @@ export async function teemillListProducts() {
   return {
     ok: true,
     products: productList,
+    diagnostic: describeShape(res.status, res.data),
   }
 }
